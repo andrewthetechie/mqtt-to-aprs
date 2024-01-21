@@ -1,0 +1,30 @@
+[aprs]
+callsign = "N0CALL"
+ssd = "0"
+# password must be an int
+password = "hehehehehe"
+host = "rotate.aprs.net"
+port = 10152
+
+[kiss]
+path = ""
+
+[location]
+# must be floats
+latitude = "invalid"
+longitude = -98.51329
+
+[mqtt]
+host = "mqtt.host"
+port = 1883
+# username = ""
+# password = ""
+
+[[mqtt.topics]]
+topic = "test/topic/topic"
+type = "json"
+output = "weather"
+target = "is"
+
+# missing fields
+

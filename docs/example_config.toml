@@ -1,0 +1,44 @@
+[logging]
+#log_path = ""
+#log_level = "DEBUG"
+
+[aprs]
+callsign = "N0CALL"
+ssid = "0"
+password = 123456
+host = "rotate.aprs.net"
+port = 10152
+
+[kiss]
+path = ""
+
+[location]
+latitude = 28.979480
+longitude = -98.51329
+
+[mqtt]
+host = "mqtt.host"
+port = 1883
+# username = ""
+# password = ""
+
+[[mqtt.topics]]
+topic = "test/topic/topic"
+type = "json"
+output = "weather"
+target = "is"
+
+[mqtt.topics.fields]
+temperature_c = "temperature_C"
+humidity = "humidity"
+
+[[mqtt.topics]]
+topic = "test/topic2/topic2"
+type = "json"
+output = "weather"
+target = "kiss"
+
+[mqtt.topics.fields]
+temperature_f = "temperature_F"
+humidity = "humidity"
+wind = "wind"
