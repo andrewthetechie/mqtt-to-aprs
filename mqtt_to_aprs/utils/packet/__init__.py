@@ -52,7 +52,7 @@ def convert_longitude(degrees_decimal: float) -> str:
     return lon
 
 
-def postion(latitude: float, longitude: float) -> str:
+def make_position(latitude: float, longitude: float) -> str:
     """Convert a decimal latitude and longitude into an aprs position string"""
     return f"{convert_latitude(latitude)}/{convert_longitude(longitude)}_"
 

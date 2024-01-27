@@ -9,7 +9,6 @@ from tomllib import loads as toml_loads
 
 import aiofiles
 import os
-import json
 from functools import lru_cache
 from functools import cached_property
 from asyncstdlib.functools import lru_cache as alru_cache
@@ -64,7 +63,7 @@ class MQTTTopicTypes(str, Enum):
     json = "json"
 
 
-class APRSOutputTypes(str, Enum):
+class APRSPacketTypes(str, Enum):
     weather = "weather"
 
 
@@ -73,12 +72,12 @@ class APRSOutputTargets(str, Enum):
     kiss = "kiss"
 
 
-class MQTTTopicFieldsConfig(BaseModel):
+class JMESPathWeatherFields(BaseModel):
     # http://www.aprs.org/doc/APRS101.PDF
     # Chapter 12, weather packet format
     # We'll prebuild some converters for now for common stuff
     # Will eventually need a better transform layer here to do some basic math
-    temperature_f: str | None = Field(None, description="JMSEPath to a Temperature in Fahrenheit")
+    temperature_f: str | None = Field(None, description="JMESPath to a Temperature in Fahrenheit")
     temperature_c: str | None = Field(None, description="JMSEPath to a Temperature in Celcius, will be converted to Fahrenheit")
     wind_dir: str | None = Field(None, description="JMSEPath to a Wind Direction in Degrees")
     wind_speed: str | None = Field(None, description="JMSEPath to Wind Speed value sustained one-minute wind speed (in mph).")
@@ -87,15 +86,34 @@ class MQTTTopicFieldsConfig(BaseModel):
     rain_last_24_hrs: str | None = Field(None, description="JMSEPath to a rainfall (in hundredths of an inch) in the last 24 hours")
     rain_since_midnight: str | None = Field(None, description="JMSEPath to a rainfall (in hundredths of an inch) since midnight")
     humidity: str | None = Field(None, description="JMSEPath to a humidity (in %. 00 = 100%).")
-    pressure: str | None = Field(None, description="JMSEPath to a barometric pressure (in tenths of millibars/tenths of hPascal).")
+    pressure_mbar: str | None = Field(None, description="JMSEPath to a barometric pressure (in tenths of millibars/tenths of hPascal).")
+    pressure_hg: str | None = Field(None, description="JMSEPath to a barometric pressure (in inches of mercury).")
+    latitude: str | None = Field(None, description="JMSEPath to this weather report's latitude as a decimal")
+    longitude: str | None = Field(None, description="JMSEPath to this weather report's longitude as a decimal")
 
+
+class TranslatorType(str, Enum):
+    jmespath = "jmespath"
+
+class JMESPathConfig(BaseModel):
+    fields: JMESPathWeatherFields
+
+    def __hash__(self):
+        return hash(";".join([f"{key}-{value}" for key, value in self.fields.dict().items()]))
+
+class TranslatorConfig(BaseModel):
+    type: TranslatorType
+    config: JMESPathConfig
+
+    def __hash__(self):
+        return hash(f"{self.type}-{hash(self.config)}")
 
 class MQTTTopicConfig(BaseModel):
     topic: str
     input_type: MQTTTopicTypes = Field("json")
-    output_type: APRSOutputTypes = Field("weather")
+    output_type: APRSPacketTypes = Field("weather")
     target: APRSOutputTargets
-    fields: MQTTTopicFieldsConfig
+    translator: TranslatorConfig
 
     @classmethod
     def load_from_env(cls) -> dict[str, any]:
@@ -108,9 +126,6 @@ class MQTTTopicConfig(BaseModel):
             value = os.environ.get(env_key, None)
             if value:
                 loaded[key] = value
-        fields = os.environ.get(f"{env_base}_fields", None)
-        if fields is not None:
-            loaded['fields'] = json.loads(fields)
         return loaded
 
     def __hash__(self) -> int:

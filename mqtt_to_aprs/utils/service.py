@@ -1,8 +1,7 @@
 from ..config import ConfigObject
 from .aprs_is import get_aprsis_sender, APRSISSender
 from .kiss import get_kiss_sender, KissSender
-from .mqtt import get_mqtt_listener, MQTTListener
-from ..config import APRSOutputTargets
+from .mqtt import MQTTListener
 from asyncio import Queue
 from asyncio import create_task
 from asyncio import gather
@@ -15,7 +14,7 @@ class MQTT2APRS:
         self.config: ConfigObject = config
         self.is_setup: bool = False
         self.service_id = str(uuid4()) if service_id is None else service_id
-        self._mqtt_listeners: list[MQTTListener] | list[None] = []
+        self._mqtt_listener: MQTTListener | None = None
         self._aprs_sender: APRSISSender | None = None
         self._aprs_sender_queue: Queue | None = None
         self._kiss_sender: KissSender | None = None
@@ -34,14 +33,12 @@ class MQTT2APRS:
             self._kiss_sender = await get_kiss_sender(config=self.config.kiss, sender_id=f"{self.service_id}-kiss-1")
             self._kiss_sender_queue = Queue()
 
-        for count, mqtt_topic in enumerate(self.config.mqtt.topics):
-            this_listener_id = f"{self.service_id}-mqtt-{mqtt_topic.topic}-{count}"
-            if mqtt_topic.target == APRSOutputTargets.internet:
-                logging.debug("%s will send to APRSIS", mqtt_topic.topic)
-                self._mqtt_listeners.append(await get_mqtt_listener(mqtt_topic, Client(**self.config.mqtt.client_args, identifier=f"mqtt2aprs-{self.service_id}-{mqtt_topic.topic}"), self._aprs_sender_queue, listener_id=this_listener_id))
-            if mqtt_topic.target == APRSOutputTargets.kiss:
-                logging.debug("%s will send to KISS", mqtt_topic.topic)
-                self._mqtt_listeners.append(await get_mqtt_listener(mqtt_topic, Client(**self.config.mqtt.client_args, identifier=f"mqtt2aprs-{self.service_id}-{mqtt_topic.topic}"), self._kiss_sender_queue, listener_id=this_listener_id))
+        self._mqtt_listener = MQTTListener(
+            config=self.config,
+            mqtt_client=Client(**self.config.mqtt.client_args, identifier=f"mqtt2aprs-{self.service_id}"),
+            internet_queue=self._aprs_sender_queue,
+            kiss_queue=self._kiss_sender_queue,
+            listener_id=f"{self.service_id}-listener")
 
         self.is_setup = True
 
@@ -50,15 +47,15 @@ class MQTT2APRS:
         if not self.is_setup:
             await self.setup()
 
-        mqtt_listener_tasks = [create_task(listener.listen()) for listener in self._mqtt_listeners]
+        mqtt_listener_tasks = [create_task(self._mqtt_listener.listen())]
         sender_tasks = []
         queues = []
         if self._aprs_sender is not None:
             sender_tasks.append(create_task(self._aprs_sender.run(self._aprs_sender_queue)))
-            queues.append("_aprs_sender_queue")
+            queues.append(self._aprs_sender_queue)
         if self._kiss_sender is not None:
             sender_tasks.append(create_task(self._kiss_sender.run(self._kiss_sender_queue)))
-            queues.append("_kiss_sender_queue")
+            queues.append(self._kiss_sender_queue)
 
 
         # with both listeners and senders running, wait for

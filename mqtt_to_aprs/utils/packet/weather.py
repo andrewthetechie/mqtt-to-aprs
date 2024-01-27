@@ -1,44 +1,43 @@
 from datetime import datetime, timezone
+import logging
 
-def hg_to_mbar(hg_val):
-    """
-    Convert inches of mercury (inHg to tenths of millibars/tenths of hPascals (mbar/hPa)
-    :param hg_val: The value in inHg
-    :return:
-    """
-    mbar = (hg_val / 0.029530) * 10
 
-    return mbar
+def make_weather_data(wind_dir: float | None = None, wind_speed: float | None = None, wind_gust: float | None = None, temperature: float | None = None,
+                 rain_last_hr: float | None = None, rain_last_24_hrs: float | None = None, rain_since_midnight: float | None = None,
+                 humidity: float | None = None, pressure: float | None = None) -> str:
 
-def str_or_dots(number, length):
-    # If parameter is None, fill with dots, otherwise pad with zero
-    if not number:
-        retn_value = "." * length
+    def wx_fmt(value: int | float, length: int = 3):
+        """converts a value into the appropriate number of digits or dots
+        """
+        return '.' * length if value is None else "{:0{l}d}".format(int(value), l=length)
 
-    else:
-        format_type = {"int": "d", "float": ".0f"}[type(number).__name__]
+    packet_string = ""
+    # wind and speed
+    packet_string += wx_fmt(wind_dir) + "/"
+    packet_string += wx_fmt(wind_speed)
+    packet_string += "g" + wx_fmt(wind_gust)
+    if temperature is not None and int(temperature) <= -100:
+        logging.debug("Temperature value %d is less than or equal to -100, rounding to -99", temperature)
+        temperature = -99
+    packet_string += "t" + wx_fmt(temperature)
+    packet_string += "r" + wx_fmt(rain_last_hr)
+    packet_string += "p" + wx_fmt(rain_last_24_hrs)
+    packet_string += "P" + wx_fmt(rain_since_midnight)
 
-        retn_value = "".join(("%0", str(length), format_type)) % number
+    if humidity is not None:
+        if int(humidity) >= 100:
+            logging.debug("Humidity value %d is greater than or equal to 100, rounding to 00", humidity)
+            packet_string += "h00"
+        else:
+            packet_string += "h" + wx_fmt(humidity, length=2)
+    packet_string += "b" + wx_fmt(pressure, 5)
 
-    return retn_value
+    return packet_string
 
-def aprs_wx(wind_dir: float | None = None, wind_speed: float | None = None, wind_gust: float | None = None, temperature: float | None = None, rain_last_hr: float | None = None,
-            rain_last_24_hrs: float | None = None, rain_since_midnight: float | None = None, humidity: float | None = None, pressure: float | None = None ):
-    # Assemble the weather data of the APRS packet
-    return "{}/{}g{}t{}r{}p{}P{}h{}b{}".format(
-        str_or_dots(wind_dir, 3),
-        str_or_dots(wind_speed, 3),
-        str_or_dots(wind_gust, 3),
-        str_or_dots(temperature, 3),
-        str_or_dots(rain_last_hr, 3),
-        str_or_dots(rain_last_24_hrs, 3),
-        str_or_dots(rain_since_midnight, 3),
-        str_or_dots(humidity, 2),
-        str_or_dots(pressure, 5),
-    )
 
-def build_position_weather_packet(address: str, position: str, wx_data: str, send_id: str = "") -> str:
+def make_position_weather_packet(position: str, weather_data: str, send_id: str = "", timestamp: str = "") -> str:
     """Creates a weather packet string"""
-    utc_datetime = datetime.now(timezone.utc)
-    packet_data = f"{address}@{utc_datetime.strftime('%d%H%M')}z{position}{wx_data}{send_id}"
+    if timestamp == "":
+        timestamp = datetime.now(timezone.utc).strftime('%d%H%M')
+    packet_data = f"@{timestamp}z{position}{weather_data}w{send_id}"
     return packet_data
